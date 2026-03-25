@@ -1,0 +1,1149 @@
+/* ============================================================
+   style.css – Retro-futurista CRT terminál stílus
+   Betűtípus: Press Start 2P (Google Fonts)
+   Frissítve: fájlkezelő panel stílusok hozzáadva
+   ============================================================ */
+
+/* --- CSS változók --- */
+:root {
+  --bg:           #060a08;
+  --grid-color:   #0d1f15;
+  --cyan:         #00ffc8;
+  --cyan-dim:     #00a882;
+  --cyan-glow:    rgba(0, 255, 200, 0.18);
+  --orange:       #ff8c00;
+  --orange-glow:  rgba(255, 140, 0, 0.25);
+  --white:        #e8f5ee;
+  --dim:          #2a3d32;
+  --dim2:         #162419;
+  --font:         'Press Start 2P', monospace;
+  --grid-size:    28px;
+  --row-h:        2.6rem;   /* Fájlsor magassága */
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--cyan);
+  font-family: var(--font);
+  font-size: 12px;
+  line-height: 1.8;
+  background-image: radial-gradient(ellipse at 50% 50%, #071410 0%, #060a08 70%);
+}
+
+/* ============================================================
+   CRT HÁTTÉR RÁCS + SCANLINE
+   ============================================================ */
+.crt-grid {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background-image:
+    linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
+  background-size: var(--grid-size) var(--grid-size);
+  animation: gridPulse 8s ease-in-out infinite;
+}
+@keyframes gridPulse {
+  0%, 100% { opacity: 0.6; }
+  50%       { opacity: 1.0; }
+}
+
+.crt-scanlines {
+  position: fixed; inset: 0; z-index: 1; pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0,0,0,0.10) 0px, rgba(0,0,0,0.10) 1px,
+    transparent 1px, transparent 3px
+  );
+}
+
+/* ============================================================
+   "READY?" KÉPERNYŐ
+   ============================================================ */
+.ready-screen {
+  position: fixed; inset: 0; z-index: 10;
+  display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.7) 100%);
+}
+
+.terminal-box {
+  position: relative;
+  width: min(600px, 90vw);
+  padding: 2rem 2.5rem 2.5rem;
+  border: 2px solid var(--cyan-dim);
+  background: rgba(0,15,10,0.85);
+  box-shadow: 0 0 20px var(--cyan-glow), 0 0 60px rgba(0,255,200,0.06), inset 0 0 30px rgba(0,255,200,0.04);
+  /* CRT bekapcsol: a crtOff fordítottja – vékony csíkból tágul ki */
+  animation: crtOn 0.55s cubic-bezier(0.16,1,0.3,1) both;
+}
+/* CRT bekapcsol animáció: scaleX(0)→scaleY(0.02)→teljes méret, brightness flash */
+@keyframes crtOn {
+  0%   { transform: scaleX(0)    scaleY(0);    opacity:0;   filter:brightness(0); }
+  25%  { transform: scaleX(0.25) scaleY(0.02); opacity:0.8; filter:brightness(3); }
+  55%  { transform: scaleX(1.02) scaleY(0.02); opacity:1;   filter:brightness(2); }
+  75%  { transform: scaleX(1)    scaleY(1.03); opacity:1;   filter:brightness(1.2); }
+  100% { transform: scaleX(1)    scaleY(1);    opacity:1;   filter:brightness(1); }
+}
+
+.terminal-header {
+  display: flex; align-items: center; gap: 0.5rem;
+  margin-bottom: 1.8rem; padding-bottom: 0.8rem;
+  border-bottom: 1px solid var(--dim);
+}
+
+.blink-dot {
+  display: inline-block; width: 10px; height: 10px;
+  background: var(--cyan); box-shadow: 0 0 6px var(--cyan);
+  animation: blinkDot 1.2s step-end infinite;
+}
+.blink-dot.delay-1 { animation-delay: 0.4s; background: var(--orange); box-shadow: 0 0 6px var(--orange); }
+.blink-dot.delay-2 { animation-delay: 0.8s; background: var(--cyan-dim); }
+@keyframes blinkDot { 0%,100%{opacity:1;} 50%{opacity:0;} }
+
+.terminal-header-title {
+  margin-left: auto; font-size: 8px; color: var(--cyan-dim); letter-spacing: 2px;
+}
+
+.ready-text-wrap { display: flex; align-items: center; gap: 6px; margin-bottom: 1.5rem; }
+
+.ready-label {
+  font-size: clamp(20px, 5vw, 32px); color: var(--cyan); letter-spacing: 4px;
+  text-shadow: 0 0 8px var(--cyan), 0 0 20px rgba(0,255,200,0.5), 0 0 50px rgba(0,255,200,0.2);
+}
+
+.cursor-block {
+  display: inline-block; color: var(--cyan);
+  font-size: clamp(20px, 5vw, 32px);
+  /* Csak akkor villog, ha van 'blinking' osztálya – JS állítja be gépelés után */
+  text-shadow: 0 0 8px var(--cyan);
+}
+.cursor-block.blinking { animation: cursorBlink 1s step-end infinite; }
+.cursor-block.small { font-size: 12px; vertical-align: middle; }
+@keyframes cursorBlink { 0%,100%{opacity:1;} 50%{opacity:0;} }
+
+.boot-log { margin-bottom: 2rem; }
+.log-line {
+  font-size: 8px; color: var(--cyan-dim); margin-bottom: 0.5rem;
+  /* Nincs CSS animáció – JS vezérli a megjelenést */
+}
+
+/* Megjelenési animáció log sorokhoz (JS adja hozzá) */
+@keyframes logFadeIn {
+  from { opacity:0; transform: translateX(-8px); }
+  to   { opacity:1; transform: translateX(0); }
+}
+.log-fadein {
+  animation: logFadeIn 0.4s ease forwards;
+}
+
+.ok-tag { color: var(--cyan); text-shadow: 0 0 6px var(--cyan); }
+
+/* ---- Progress bar (LOADING PERSONALITY MODULE) ---- */
+.progress-wrap {
+  display: inline-block;
+  width: 80px;
+  height: 8px;
+  border: 1px solid var(--cyan-dim);
+  vertical-align: middle;
+  margin: 0 6px;
+  background: rgba(0,255,200,0.05);
+  position: relative;
+  overflow: hidden;
+}
+.progress-bar {
+  display: block;
+  height: 100%;
+  width: 0%;
+  background: var(--cyan);
+  box-shadow: 0 0 6px var(--cyan);
+  transition: width 0.05s linear; /* JS lépteti */
+}
+
+.ready-buttons { display: flex; gap: 1.5rem; justify-content: center; margin-top: 0.5rem;
+  transition: opacity 0.3s ease;
+}
+
+.btn {
+  font-family: var(--font); font-size: 14px; padding: 0.7rem 1.5rem;
+  border: 2px solid currentColor; background: transparent; cursor: pointer;
+  letter-spacing: 3px; transition: background 0.15s, box-shadow 0.15s, transform 0.1s;
+}
+.btn-yes {
+  color: var(--orange); border-color: var(--orange);
+  box-shadow: 0 0 8px var(--orange-glow);
+}
+.btn-yes:hover {
+  background: rgba(255,140,0,0.12);
+  box-shadow: 0 0 18px var(--orange-glow), 0 0 4px var(--orange);
+  transform: translateY(-2px);
+}
+.btn-yes:active { transform: translateY(0); background: rgba(255,140,0,0.25); }
+
+.btn-no { color: var(--white); border-color: var(--dim); }
+.btn-no:hover {
+  background: rgba(255,255,255,0.06); border-color: var(--white);
+  box-shadow: 0 0 10px rgba(232,245,238,0.15); transform: translateY(-2px);
+}
+.btn-no:active { transform: translateY(0); }
+
+/* CRT kikapcsol animáció */
+.crt-off {
+  animation: crtOff 0.5s cubic-bezier(0.4,0,1,1) forwards !important;
+}
+@keyframes crtOff {
+  0%   { transform: scaleY(1)    scaleX(1);    opacity:1;   filter:brightness(1); }
+  30%  { transform: scaleY(0.02) scaleX(1.05); opacity:1;   filter:brightness(3); }
+  60%  { transform: scaleY(0.02) scaleX(0.3);  opacity:0.8; filter:brightness(2); }
+  100% { transform: scaleY(0)    scaleX(0);    opacity:0;   filter:brightness(0); }
+}
+
+/* ============================================================
+   FŐPANEL
+   ============================================================ */
+.main-panel {
+  position: fixed; inset: 1.5rem; z-index: 5;
+  border: 2px solid var(--cyan-dim);
+  background: rgba(0,12,8,0.96);
+  display: flex; flex-direction: column;
+  box-shadow: 0 0 25px var(--cyan-glow), 0 0 80px rgba(0,255,200,0.05), inset 0 0 40px rgba(0,255,200,0.03);
+  animation: panelReveal 0.6s ease-out both;
+}
+@keyframes panelReveal {
+  from { opacity:0; transform:scaleX(0.02); filter:brightness(3); }
+  to   { opacity:1; transform:scaleX(1);    filter:brightness(1); }
+}
+
+/* Sarokjelek */
+.corner { position: absolute; font-size: 22px; color: var(--orange); text-shadow: 0 0 8px var(--orange-glow); line-height:1; }
+.corner.tl { top:-2px; left:-2px; }
+.corner.tr { top:-2px; right:-2px; }
+.corner.bl { bottom:-2px; left:-2px; }
+.corner.br { bottom:-2px; right:-2px; }
+
+/* Fejlécsáv */
+.panel-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0.7rem 1.2rem;
+  border-bottom: 1px solid var(--dim);
+  background: rgba(0,255,200,0.04);
+  flex-shrink: 0;
+}
+.panel-title { font-size: 9px; color: var(--cyan-dim); letter-spacing: 3px; }
+.panel-status { font-size: 8px; color: var(--orange); text-shadow: 0 0 6px var(--orange-glow); }
+.blink-text { animation: blinkText 1.5s step-end infinite; }
+@keyframes blinkText { 0%,100%{opacity:1;} 50%{opacity:0;} }
+
+/* ============================================================
+   BREADCRUMB NAVIGÁCIÓ
+   ============================================================ */
+.breadcrumb-bar {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 0;
+  padding: 0.5rem 1.2rem;
+  border-bottom: 1px solid var(--dim2);
+  background: rgba(0,0,0,0.25);
+  font-size: 8px;
+  flex-shrink: 0;
+  min-height: 2.2rem;
+}
+
+/* Egy breadcrumb elem */
+.breadcrumb-item {
+  color: var(--cyan-dim);
+  cursor: pointer;
+  padding: 2px 4px;
+  transition: color 0.15s;
+}
+.breadcrumb-item:hover { color: var(--cyan); text-shadow: 0 0 6px var(--cyan); }
+
+/* Az aktív (utolsó) elem nem kattintható */
+.breadcrumb-item.active { color: var(--cyan); cursor: default; }
+.breadcrumb-item.active:hover { text-shadow: none; }
+
+/* Elválasztó jel: > */
+.breadcrumb-sep { color: var(--orange); padding: 0 4px; font-size: 8px; }
+
+/* ============================================================
+   FÁJLLISTA FEJLÉC (oszlopfeliratok)
+   ============================================================ */
+.file-list-header {
+  display: grid;
+  grid-template-columns: 52px 1fr 90px 90px;
+  gap: 0;
+  padding: 0.35rem 1.2rem;
+  border-bottom: 1px solid var(--dim);
+  background: rgba(0,255,200,0.03);
+  font-size: 7px;
+  color: var(--dim);
+  letter-spacing: 2px;
+  flex-shrink: 0;
+}
+
+/* ============================================================
+   GÖRGETHETŐ FÁJLLISTA TERÜLET
+   ============================================================ */
+.panel-content {
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--dim) transparent;
+}
+.panel-content::-webkit-scrollbar       { width: 6px; }
+.panel-content::-webkit-scrollbar-track { background: transparent; }
+.panel-content::-webkit-scrollbar-thumb { background: var(--dim); border-radius: 3px; }
+
+/* ============================================================
+   FÁJL SOR
+   Minden elem (mappa/fájl) egy ilyen sor
+   ============================================================ */
+.file-row {
+  display: grid;
+  grid-template-columns: 52px 1fr 90px 90px;
+  align-items: center;
+  height: var(--row-h);
+  padding: 0 1.2rem;
+  cursor: pointer;
+  border-bottom: 1px solid transparent;
+  transition: background 0.1s, border-color 0.1s;
+  position: relative;
+  outline: none;   /* saját fókusz stílusunk van */
+}
+
+/* Hover állapot */
+.file-row:hover {
+  background: rgba(0, 255, 200, 0.06);
+  border-bottom-color: var(--dim2);
+}
+
+/* Billentyűzettel kijelölt sor */
+.file-row.selected {
+  background: rgba(0, 255, 200, 0.12);
+  border-bottom-color: var(--cyan-dim);
+}
+.file-row.selected .col-name-text { color: var(--cyan); text-shadow: 0 0 6px var(--cyan); }
+
+/* Kijelölés-indikátor: bal szélén narancssárga sáv */
+.file-row.selected::before {
+  content: '▶';
+  position: absolute; left: 0.5rem;
+  top: 50%; transform: translateY(-50%); /* Vertikális középre igazítás */
+  color: var(--orange);
+  font-size: 8px;
+  text-shadow: 0 0 6px var(--orange-glow);
+  line-height: 1;
+}
+
+/* ---- Ikonok ([DIR], [MD], stb.) ---- */
+.col-icon {
+  font-size: 7px;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+/* Típus szerinti színek */
+.icon-dir  { color: var(--orange); text-shadow: 0 0 5px var(--orange-glow); }
+.icon-md   { color: var(--cyan);   text-shadow: 0 0 4px var(--cyan-glow); }
+.icon-img  { color: #a78bfa; }
+.icon-yt   { color: #f87171; }
+.icon-txt  { color: var(--cyan-dim); }
+.icon-file { color: var(--dim); }
+
+/* ---- Fájlnév oszlop ---- */
+.col-name { overflow: hidden; padding-right: 0.5rem; }
+.col-name-text {
+  font-size: 9px;
+  color: var(--cyan-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+  transition: color 0.1s;
+}
+/* Mappa neve kicsit fényesebb */
+.file-row[data-type="dir"] .col-name-text { color: var(--cyan); }
+
+/* ---- Méret + Dátum oszlop ---- */
+.col-size, .col-date {
+  font-size: 7px;
+  color: var(--dim);
+  white-space: nowrap;
+  letter-spacing: 1px;
+}
+
+/* ============================================================
+   ÜRES MAPPA ÁLLAPOT
+   ============================================================ */
+.empty-state {
+  padding: 3rem 2rem;
+  text-align: center;
+  font-size: 9px;
+  color: var(--dim);
+  line-height: 2;
+}
+.empty-state .empty-icon { font-size: 24px; display: block; margin-bottom: 1rem; color: var(--dim); }
+
+/* ============================================================
+   HIBAÜZENET
+   ============================================================ */
+.error-state {
+  padding: 2rem; font-size: 9px; color: var(--orange);
+  text-shadow: 0 0 6px var(--orange-glow);
+}
+
+/* ============================================================
+   ÁLLAPOTSOR (alul)
+   ============================================================ */
+.statusbar {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 0.4rem 1.2rem;
+  border-top: 1px solid var(--dim);
+  background: rgba(0,0,0,0.3);
+  flex-shrink: 0;
+}
+#statusbar-count  { font-size: 7px; color: var(--cyan-dim); }
+.statusbar-hint   { font-size: 7px; color: var(--dim); letter-spacing: 1px; }
+
+/* ============================================================
+   BETÖLTÉS ANIMÁCIÓ
+   ============================================================ */
+.loading-row {
+  padding: 2rem 1.2rem;
+  font-size: 9px;
+  color: var(--cyan-dim);
+}
+.loading-row::after {
+  content: '';
+  display: inline-block;
+  animation: loadingDots 1.2s step-end infinite;
+}
+@keyframes loadingDots {
+  0%   { content: '.'; }
+  33%  { content: '..'; }
+  66%  { content: '...'; }
+  100% { content: ''; }
+}
+
+/* ============================================================
+   TARTALOM-MEGJELENÍTŐ MODAL
+   .md és .yt fájlokhoz felugró terminál-ablak
+   ============================================================ */
+
+/* Overlay: félátlátszó sötét háttér a modal mögött */
+.viewer-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(0, 5, 3, 0.88);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Kattintásos bezárásnál a háttér is reagál */
+  cursor: pointer;
+  backdrop-filter: blur(2px);
+  animation: overlayIn 0.2s ease both;
+}
+@keyframes overlayIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Belső panel: a modal ablak maga */
+.viewer-box {
+  cursor: default;
+  width: min(760px, 92vw);
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  border: 2px solid var(--cyan-dim);
+  background: #030d08;
+  box-shadow:
+    0 0 30px var(--cyan-glow),
+    0 0 80px rgba(0, 255, 200, 0.07),
+    inset 0 0 40px rgba(0, 255, 200, 0.03);
+  animation: viewerSlideIn 0.25s cubic-bezier(0.16,1,0.3,1) both;
+  position: relative;
+}
+@keyframes viewerSlideIn {
+  from { transform: scale(0.92) translateY(16px); opacity: 0; }
+  to   { transform: scale(1)    translateY(0);    opacity: 1; }
+}
+
+/* YT modal: szélesebb, 16:9-arányhoz igazítva */
+.viewer-box.viewer-yt {
+  width: min(900px, 95vw);
+}
+
+/* --- Modal fejlécsáv --- */
+.viewer-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid var(--dim);
+  background: rgba(0, 255, 200, 0.04);
+  flex-shrink: 0;
+}
+
+.viewer-header-dots {
+  display: flex;
+  gap: 5px;
+}
+
+/* Modal fájlnév cím */
+.viewer-title {
+  flex: 1;
+  font-size: 8px;
+  color: var(--cyan-dim);
+  letter-spacing: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 0.5rem;
+}
+
+/* [X] bezárás gomb */
+.viewer-close {
+  font-family: var(--font);
+  font-size: 9px;
+  color: var(--orange);
+  background: transparent;
+  border: 1px solid var(--orange);
+  padding: 4px 8px;
+  cursor: pointer;
+  letter-spacing: 2px;
+  flex-shrink: 0;
+  transition: background 0.1s, box-shadow 0.1s;
+}
+.viewer-close:hover {
+  background: rgba(255, 140, 0, 0.15);
+  box-shadow: 0 0 8px var(--orange-glow);
+}
+.viewer-close:focus-visible {
+  outline: 1px solid var(--orange);
+  outline-offset: 2px;
+}
+
+/* --- Modal tartalom terület --- */
+.viewer-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.5rem 2rem;
+  scrollbar-width: thin;
+  scrollbar-color: var(--dim) transparent;
+}
+.viewer-content::-webkit-scrollbar       { width: 6px; }
+.viewer-content::-webkit-scrollbar-track { background: transparent; }
+.viewer-content::-webkit-scrollbar-thumb { background: var(--dim); border-radius: 3px; }
+
+/* Betöltés szöveg a modalban */
+.viewer-loading {
+  font-size: 9px;
+  color: var(--cyan-dim);
+  padding: 2rem 0;
+}
+
+/* Pontozó animáció a betöltéshez */
+.loading-dots::after {
+  content: '';
+  animation: loadingDots 1.2s step-end infinite;
+}
+@keyframes loadingDots {
+  0%  { content: '.';   }
+  33% { content: '..';  }
+  66% { content: '...'; }
+}
+
+/* Hibaüzenet a modalban */
+.viewer-error {
+  font-size: 9px;
+  color: var(--orange);
+  text-shadow: 0 0 6px var(--orange-glow);
+  padding: 1rem 0;
+  line-height: 2;
+}
+
+/* ============================================================
+   MARKDOWN TARTALOM STÍLUSOK (.md-body)
+   A marked.js által generált HTML-t terminál-stílusba öltözteti
+   ============================================================ */
+.md-body {
+  font-family: var(--font);
+  font-size: 9px;
+  line-height: 2;
+  color: var(--cyan-dim);
+}
+
+/* Fejlécek: cián szín + glow, méret szerint csökken */
+.md-body h1 {
+  font-size: 14px;
+  color: var(--cyan);
+  text-shadow: 0 0 8px var(--cyan-glow);
+  margin-bottom: 1.2rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--dim);
+  letter-spacing: 2px;
+}
+.md-body h2 {
+  font-size: 11px;
+  color: var(--cyan);
+  text-shadow: 0 0 5px var(--cyan-glow);
+  margin: 1.5rem 0 0.8rem;
+  letter-spacing: 1px;
+}
+.md-body h2::before { content: '## '; color: var(--orange); }
+.md-body h3 {
+  font-size: 9px;
+  color: var(--orange);
+  margin: 1.2rem 0 0.6rem;
+}
+.md-body h3::before { content: ''; } /* ### nem jelenik meg – a marked.js már feldolgozta */
+
+/* Bekezdések */
+.md-body p { margin-bottom: 1rem; }
+
+/* Félkövér: narancssárga kiemelés */
+.md-body strong {
+  color: var(--orange);
+  text-shadow: 0 0 5px var(--orange-glow);
+  font-weight: normal; /* Press Start 2P nem rendelkezik bold-dal */
+}
+
+/* Dőlt: halvány cián */
+.md-body em { color: var(--cyan); font-style: normal; }
+
+/* Listák: > jelöléssel */
+.md-body ul, .md-body ol {
+  margin: 0.8rem 0 0.8rem 1.5rem;
+  padding: 0;
+  list-style: none;
+}
+.md-body ul li::before { content: '> '; color: var(--orange); }
+/* Számozott lista: CSS counter a li::before-ban – de a li-nek nincs saját counter-reset,
+   ezért a szülő ol-on reseteljük, és a li növeli */
+.md-body ol {
+  counter-reset: ol-counter; /* Reset itt, az ol elemen */
+  list-style: none;
+}
+.md-body ol li {
+  counter-increment: ol-counter; /* Minden li növeli a saját ol szülőjének számláját */
+}
+.md-body ol li::before {
+  content: counter(ol-counter) '. ';
+  color: var(--orange);
+}
+.md-body li { margin-bottom: 0.4rem; padding-left: 0.5rem; }
+
+/* Inline kód: kiemelve */
+.md-body code {
+  background: rgba(0, 255, 200, 0.08);
+  border: 1px solid var(--dim);
+  color: var(--cyan);
+  padding: 1px 5px;
+  font-family: var(--font);
+  font-size: 8px;
+}
+
+/* Kódblokk */
+.md-body pre {
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--dim);
+  border-left: 3px solid var(--cyan-dim);
+  padding: 1rem;
+  overflow-x: auto;
+  margin: 1rem 0;
+}
+.md-body pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 8px;
+  line-height: 1.8;
+}
+
+/* Idézet blokk (blockquote) */
+.md-body blockquote {
+  border-left: 3px solid var(--orange);
+  padding-left: 1rem;
+  margin: 1rem 0;
+  color: var(--cyan-dim);
+  background: rgba(255, 140, 0, 0.04);
+}
+.md-body blockquote p::before { content: '» '; color: var(--orange); }
+
+/* Vízszintes elválasztó */
+.md-body hr {
+  border: none;
+  border-top: 1px solid var(--dim);
+  margin: 1.5rem 0;
+}
+
+/* Hivatkozások */
+.md-body a {
+  color: var(--cyan);
+  text-decoration: none;
+  border-bottom: 1px solid var(--cyan-dim);
+  transition: color 0.15s, border-color 0.15s;
+}
+.md-body a:hover {
+  color: var(--orange);
+  border-color: var(--orange);
+  text-shadow: 0 0 5px var(--orange-glow);
+}
+
+/* Táblázat */
+.md-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+  font-size: 8px;
+}
+.md-body th {
+  color: var(--cyan);
+  border-bottom: 1px solid var(--cyan-dim);
+  padding: 0.4rem 0.8rem;
+  text-align: left;
+}
+.md-body td {
+  padding: 0.4rem 0.8rem;
+  border-bottom: 1px solid var(--dim2);
+  color: var(--cyan-dim);
+}
+.md-body tr:hover td { background: rgba(0, 255, 200, 0.04); }
+
+/* ============================================================
+   YOUTUBE EMBED STÍLUSOK
+   ============================================================ */
+
+/* 16:9 arányú wrapper a responsive iframe-hez */
+.yt-wrap {
+  position: relative;
+  width: 100%;
+  padding-top: 56.25%; /* 16:9 arány */
+  background: #000;
+  border: 1px solid var(--dim);
+  /* Halvány scanline a CRT hatáshoz */
+  overflow: hidden;
+}
+
+/* CRT scanline overlay a YT lejátszón is */
+.yt-scanline {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0,0,0,0.06) 0px, rgba(0,0,0,0.06) 1px,
+    transparent 1px, transparent 3px
+  );
+}
+
+/* Az iframe kitölti a wrapper 100%-át */
+.yt-iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+/* URL megjelenítő sor az iframe alatt */
+.yt-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  margin-top: 0.6rem;
+  font-size: 7px;
+}
+.yt-label {
+  color: #f87171; /* YT piros */
+  text-shadow: 0 0 5px rgba(248, 113, 113, 0.4);
+  flex-shrink: 0;
+}
+.yt-url {
+  color: var(--dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ============================================================
+   SZÖVEGES / KÓD NÉZEGETŐ STÍLUSOK (.viewer-code modal)
+   ============================================================ */
+
+.viewer-box.viewer-code {
+  width: min(860px, 95vw);
+}
+
+/* Fejléc sáv: kiterjesztés + sorszám */
+.code-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.4rem 0.8rem;
+  background: rgba(0, 255, 200, 0.04);
+  border-bottom: 1px solid var(--dim);
+  margin-bottom: 0;
+  font-size: 7px;
+}
+.code-lang  { color: var(--orange); letter-spacing: 2px; }
+.code-lines { color: var(--dim);    letter-spacing: 1px; }
+
+/* Kódblokk: görgethető, sorszámos hatás */
+.code-block {
+  margin: 0;
+  padding: 1rem 1.2rem;
+  background: transparent;
+  border: none;
+  overflow-x: auto;
+  font-family: var(--font);
+  font-size: 8px;
+  line-height: 2;
+  color: var(--cyan-dim);
+  white-space: pre;        /* Tabulátorok és szóközök megőrzése */
+  tab-size: 2;
+  counter-reset: line;     /* Sor-számozáshoz (opcionális) */
+}
+
+.code-block code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+/* ============================================================
+   KÉPNÉZEGETŐ STÍLUSOK (.viewer-img modal)
+   ============================================================ */
+
+/* Képnézegető modal: igazodik a kép méretéhez, max szélességet korlátoz */
+.viewer-box.viewer-img {
+  width: min(900px, 95vw);
+}
+
+/* Kép wrapper: középre igazítja, háttér a "stúdió" hatáshoz */
+.img-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  background:
+    repeating-linear-gradient(45deg, #060e09 0px, #060e09 10px, #070f0a 10px, #070f0a 20px);
+  /* Halvány sakktábla-minta – a kép átlátszó részeit jelöli */
+}
+
+/* Betöltés szöveg a kép felett, amíg tölt */
+.img-loading {
+  position: absolute;
+  font-size: 9px;
+  color: var(--cyan-dim);
+  z-index: 2;
+}
+
+/* Maga a kép: kezdetben láthatatlan, load esemény után jelenik meg */
+.img-viewer {
+  display: block;
+  max-width: 100%;
+  max-height: 70vh;
+  object-fit: contain;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  position: relative;
+  z-index: 1;
+  /* Enyhe CRT-stílusú árnyék */
+  filter: drop-shadow(0 0 12px rgba(0, 255, 200, 0.15));
+}
+
+/* Betöltés után: fade-in */
+.img-viewer.img-loaded {
+  opacity: 1;
+}
+
+/* Metaadatok sora a kép alatt */
+.img-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0.5rem 0;
+  font-size: 7px;
+  border-top: 1px solid var(--dim);
+  margin-top: 0.5rem;
+}
+
+.img-label    { color: #a78bfa; text-shadow: 0 0 5px rgba(167, 139, 250, 0.4); }
+.img-filename { color: var(--cyan-dim); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.img-size     { color: var(--dim); flex-shrink: 0; }
+
+/* ============================================================
+   CUSTOM KONTEXTUS MENÜ
+   Fájl/mappa sorokon jobb klikkel jelenik meg
+   ============================================================ */
+
+/* Menü konténer: fix pozícionált, JS állítja a koordinátákat */
+.ctx-menu {
+  position: fixed;
+  z-index: 100;
+  min-width: 210px;
+
+  /* Terminál-doboz stílus */
+  background: #020c06;
+  border: 2px solid var(--cyan-dim);
+  box-shadow:
+    0 0 20px var(--cyan-glow),
+    0 0 60px rgba(0, 255, 200, 0.06),
+    inset 0 0 20px rgba(0, 255, 200, 0.02);
+
+  /* Megjelenési animáció: gyors scale-in */
+  animation: ctxAppear 0.12s cubic-bezier(0.16, 1, 0.3, 1) both;
+  transform-origin: top left; /* Az egér pozíciójából nyílik */
+}
+
+@keyframes ctxAppear {
+  from { opacity: 0; transform: scale(0.88); }
+  to   { opacity: 1; transform: scale(1);    }
+}
+
+/* Fejlécsáv: fájlnév megjelenítése */
+.ctx-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.8rem;
+  background: rgba(0, 255, 200, 0.05);
+  border-bottom: 1px solid var(--dim);
+  overflow: hidden;
+}
+
+.ctx-header-icon {
+  font-size: 7px;
+  flex-shrink: 0;
+}
+
+.ctx-header-name {
+  font-size: 7px;
+  color: var(--cyan-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 1px;
+}
+
+/* Vékony elválasztó vonal a fejléc és menüpontok között */
+.ctx-sep {
+  height: 1px;
+  background: var(--dim);
+  margin: 0;
+}
+
+/* Egy menüpont gomb */
+.ctx-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.55rem 0.8rem;
+  background: transparent;
+  border: none;
+  border-left: 3px solid transparent; /* Hover-kor narancssárga lesz */
+  color: var(--cyan-dim);
+  font-family: var(--font);
+  font-size: 8px;
+  letter-spacing: 1px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.08s, color 0.08s, border-color 0.08s;
+  white-space: nowrap;
+}
+
+/* Billentyű prefix [D], [C] stb. */
+.ctx-item-key {
+  color: var(--orange);
+  font-size: 7px;
+  flex-shrink: 0;
+  min-width: 20px;
+}
+
+/* Hover: narancssárga kiemelés + bal szél */
+.ctx-item:hover,
+.ctx-item:focus-visible {
+  background: rgba(255, 140, 0, 0.1);
+  color: var(--orange);
+  border-left-color: var(--orange);
+  text-shadow: 0 0 6px var(--orange-glow);
+  outline: none;
+}
+.ctx-item:hover .ctx-item-key,
+.ctx-item:focus-visible .ctx-item-key {
+  text-shadow: 0 0 8px var(--orange);
+}
+
+/* Aktív (kattintás) pillanat */
+.ctx-item:active {
+  background: rgba(255, 140, 0, 0.2);
+}
+
+/* Mappákon a letöltés/link opciók inaktívak → el is rejtjük JS-ből */
+.ctx-item:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Jobb sarokhoz igazítás, ha a menü kilógna a képernyőből */
+.ctx-menu.flip-x { transform-origin: top right; }
+.ctx-menu.flip-y { transform-origin: bottom left; }
+.ctx-menu.flip-x.flip-y { transform-origin: bottom right; }
+
+/* Toast értesítés: "Link másolva!" visszajelzés */
+.ctx-toast {
+  position: fixed;
+  bottom: 2.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200;
+  background: #030d08;
+  border: 1px solid var(--cyan-dim);
+  color: var(--cyan);
+  font-family: var(--font);
+  font-size: 8px;
+  padding: 0.5rem 1.2rem;
+  letter-spacing: 2px;
+  box-shadow: 0 0 15px var(--cyan-glow);
+  animation: toastIn 0.2s ease both, toastOut 0.3s ease 1.8s both;
+  pointer-events: none;
+}
+@keyframes toastIn  { from { opacity: 0; transform: translateX(-50%) translateY(8px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+@keyframes toastOut { from { opacity: 1; } to { opacity: 0; } }
+
+/* ============================================================
+   CLI PROMPT MEZŐ
+   A főpanel alján, a statusbar alatt
+   ============================================================ */
+
+/* Prompt sor konténer */
+.cli-bar {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 0.4rem 0.8rem;
+  border-top: 2px solid var(--cyan-dim);
+  background: rgba(0, 255, 200, 0.03);
+  flex-shrink: 0;
+  box-shadow: 0 -4px 20px rgba(0, 255, 200, 0.05);
+}
+
+/* ~/data> prefix */
+.cli-prefix {
+  font-size: 8px;
+  color: var(--orange);
+  text-shadow: 0 0 6px var(--orange-glow);
+  white-space: nowrap;
+  flex-shrink: 0;
+  padding-right: 0.5rem;
+  letter-spacing: 1px;
+  user-select: none;
+}
+
+/* Szöveg beviteli mező */
+.cli-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-family: var(--font);
+  font-size: 9px;
+  color: var(--cyan);
+  caret-color: var(--cyan);
+  letter-spacing: 1px;
+  padding: 0.2rem 0.4rem;
+  min-width: 0; /* flex overflow fix */
+}
+.cli-input::placeholder {
+  color: var(--dim);
+  font-size: 7px;
+}
+/* Fókusz: enyhe glow a teljes soron */
+.cli-input:focus ~ .cli-run,
+.cli-bar:focus-within {
+  box-shadow: 0 -4px 25px rgba(0, 255, 200, 0.1);
+}
+
+/* Futtatás gomb */
+.cli-run {
+  font-family: var(--font);
+  font-size: 8px;
+  color: var(--cyan-dim);
+  background: transparent;
+  border: 1px solid var(--dim);
+  padding: 3px 8px;
+  cursor: pointer;
+  letter-spacing: 1px;
+  flex-shrink: 0;
+  transition: color 0.1s, border-color 0.1s, box-shadow 0.1s;
+}
+.cli-run:hover {
+  color: var(--cyan);
+  border-color: var(--cyan-dim);
+  box-shadow: 0 0 8px var(--cyan-glow);
+}
+
+/* CLI kimenet – a prompt alatt jelenik meg (hiba/siker/help) */
+.cli-output {
+  font-size: 8px;
+  line-height: 1.9;
+  padding: 0 1rem;
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.2s ease, padding 0.2s ease;
+  flex-shrink: 0;
+  border-top: 1px solid transparent;
+}
+
+/* Ha van tartalom: kinyílik */
+.cli-output.has-content {
+  max-height: 120px;
+  overflow-y: auto;
+  padding: 0.5rem 1rem;
+  border-top-color: var(--dim2);
+  background: rgba(0, 0, 0, 0.3);
+}
+
+/* Szín-osztályok a kimeneten */
+.cli-ok    { color: var(--cyan);   }
+.cli-err   { color: var(--orange); text-shadow: 0 0 5px var(--orange-glow); }
+.cli-info  { color: var(--cyan-dim); }
+.cli-dim   { color: var(--dim); }
+
+/* Tab-completion tipp */
+.cli-tab-hint {
+  font-size: 7px;
+  color: var(--dim);
+  padding-left: 1rem;
+}
+
+/* ============================================================
+   SEGÉDOSZTÁLYOK
+   ============================================================ */
+.hidden { display: none !important; }
+
+/* ============================================================
+   RESZPONZÍV
+   ============================================================ */
+@media (max-width: 600px) {
+  .ready-label   { font-size: 18px; }
+  .cursor-block  { font-size: 18px; }
+  .terminal-box  { padding: 1.5rem; }
+  .main-panel    { inset: 0.5rem; }
+
+  /* Kis képernyőn a dátum oszlop eltűnik */
+  .file-list-header,
+  .file-row { grid-template-columns: 46px 1fr 70px; }
+  .col-date  { display: none; }
+}
