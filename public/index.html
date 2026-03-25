@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TERMINAL // READY</title>
+
+  <!-- Google Fonts: pixeles terminál-betűtípus -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- CRT rácshálós háttér (CSS-sel rajzolva) -->
+  <div class="crt-grid" aria-hidden="true"></div>
+  <!-- CRT scanline effekt -->
+  <div class="crt-scanlines" aria-hidden="true"></div>
+
+  <!-- ============================================================
+       "Ready?" indítóképernyő
+       ============================================================ -->
+  <div id="ready-screen" class="ready-screen" role="main">
+    <div class="terminal-box" id="terminal-box">
+
+      <div class="terminal-header">
+        <span class="blink-dot"></span>
+        <span class="blink-dot delay-1"></span>
+        <span class="blink-dot delay-2"></span>
+        <span class="terminal-header-title">SYS://INIT_v1.0</span>
+      </div>
+
+      <!-- "Ready?" szöveg – JS írja ki karakterenként -->
+      <div class="ready-text-wrap">
+        <span class="ready-label" id="ready-label"></span>
+        <span class="cursor-block" id="ready-cursor" aria-hidden="true">&#9608;</span>
+      </div>
+
+      <div class="boot-log" aria-hidden="true">
+        <!-- 1. sor: azonnal megjelenik a gépelés után -->
+        <p class="log-line" id="log-bios">BIOS OK &nbsp;&nbsp;&nbsp; MEM: 640K &nbsp;&nbsp;&nbsp; DISPLAY: VGA</p>
+
+        <!-- 2. sor: progress bar + OK (JS vezérli) -->
+        <p class="log-line" id="log-loading">
+          LOADING PERSONALITY MODULE...
+          <span class="progress-wrap" id="progress-wrap">
+            <span class="progress-bar" id="progress-bar"></span>
+          </span>
+          <span class="ok-tag" id="log-ok" style="display:none">OK</span>
+        </p>
+
+        <!-- 3. sor: az OK után jelenik meg -->
+        <p class="log-line" id="log-await" style="opacity:0">AWAITING USER INPUT</p>
+      </div>
+
+      <div class="ready-buttons" id="ready-buttons" style="opacity:0; pointer-events:none">
+        <button id="btn-yes" class="btn btn-yes" aria-label="Igen, belépés">[ Y ]</button>
+        <button id="btn-no"  class="btn btn-no"  aria-label="Nem, kilépés">[ N ]</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================
+       Főpanel – [Y] után jelenik meg
+       ============================================================ -->
+  <div id="main-panel" class="main-panel hidden" role="main" aria-label="Főpanel">
+
+    <span class="corner tl">┌</span>
+    <span class="corner tr">┐</span>
+    <span class="corner bl">└</span>
+    <span class="corner br">┘</span>
+
+    <!-- Fejlécsáv: cím + státusz -->
+    <div class="panel-header">
+      <span class="panel-title" id="panel-title">// FÁJLKEZELŐ</span>
+      <span class="panel-status blink-text">&#9646; ONLINE</span>
+    </div>
+
+    <!-- Breadcrumb navigáció (aktuális útvonal megjelenítése) -->
+    <div class="breadcrumb-bar" id="breadcrumb-bar" aria-label="Útvonal">
+      <!-- JS tölti fel -->
+    </div>
+
+    <!-- Fájlkezelő fejléc (oszlopnevek) -->
+    <div class="file-list-header" aria-hidden="true">
+      <span class="col-icon">TYP</span>
+      <span class="col-name">NÉV</span>
+      <span class="col-size">MÉRET</span>
+      <span class="col-date">DÁTUM</span>
+    </div>
+
+    <!-- Görgethető fájllista -->
+    <div class="panel-content" id="file-list-wrap" role="list" aria-label="Fájlok">
+      <!-- JS tölti fel -->
+    </div>
+
+    <!-- Állapotsor alul: elem szám + gyorsbillentyű tipp -->
+    <div class="statusbar">
+      <span id="statusbar-count">Töltés...</span>
+      <span class="statusbar-hint">ENTER / kattintás: megnyitás &nbsp;|&nbsp; BACKSPACE: vissza</span>
+    </div>
+
+    <!-- ============================================================
+         CLI PROMPT MEZŐ
+         cd <útvonal>  → navigálás (rejtett mappákba is)
+         open <fájl>   → fájl megnyitása (rejtett mappából is)
+         ls            → aktuális mappa listázása
+         help          → parancsok felsorolása
+         ============================================================ -->
+    <div class="cli-bar" id="cli-bar">
+      <!-- Prompt prefix: aktuális útvonal -->
+      <span class="cli-prefix" id="cli-prefix">~/data&gt;</span>
+      <!-- Beviteli mező -->
+      <input
+        type="text"
+        id="cli-input"
+        class="cli-input"
+        autocomplete="off"
+        autocorrect="off"
+        autocapitalize="off"
+        spellcheck="false"
+        placeholder="cd <mappa> | open <fájl> | ls | help"
+        aria-label="Terminál parancs"
+      />
+      <!-- Futtatás gomb (mobilhoz is) -->
+      <button class="cli-run" id="cli-run" aria-label="Futtatás">[ ↵ ]</button>
+    </div>
+
+    <!-- CLI kimenet: parancs eredménye (hiba, siker, help) -->
+    <div class="cli-output" id="cli-output" aria-live="polite"></div>
+
+  </div>
+
+
+  <!-- ============================================================
+       RÉTEG 5: Tartalom-megjelenítő modal ablak
+       .md, .yt és egyéb fájlok megnyitásakor jelenik meg
+       ============================================================ -->
+  <div id="viewer-overlay" class="viewer-overlay hidden" role="dialog" aria-modal="true" aria-label="Tartalom megjelenítő">
+
+    <!-- Belső panel: terminál ablak stílusban -->
+    <div class="viewer-box" id="viewer-box">
+
+      <!-- Fejlécsáv: fájlnév + bezárás gomb -->
+      <div class="viewer-header">
+        <div class="viewer-header-dots" aria-hidden="true">
+          <span class="blink-dot"></span>
+          <span class="blink-dot delay-1"></span>
+          <span class="blink-dot delay-2"></span>
+        </div>
+        <!-- Aktuálisan megnyitott fájl neve (JS tölti fel) -->
+        <span class="viewer-title" id="viewer-title">—</span>
+        <!-- Bezárás gomb -->
+        <button class="viewer-close" id="viewer-close" aria-label="Bezárás">[ X ]</button>
+      </div>
+
+      <!-- Tartalom terület: MD / YT váltakozik -->
+      <div class="viewer-content" id="viewer-content">
+        <!-- JS tölti fel dinamikusan -->
+      </div>
+
+    </div><!-- /.viewer-box -->
+  </div><!-- /#viewer-overlay -->
+
+
+  <!-- ============================================================
+       RÉTEG 6: Custom jobb klikk kontextus menü
+       Csak fájl/mappa sorokon jelenik meg, a böngésző menüje tiltva
+       ============================================================ -->
+  <nav id="ctx-menu" class="ctx-menu hidden" role="menu" aria-label="Kontextus menü">
+
+    <!-- Fejlécsáv: mutatja melyik fájlon nyílt meg -->
+    <div class="ctx-header" id="ctx-header" aria-hidden="true">
+      <span class="ctx-header-icon" id="ctx-header-icon">[---]</span>
+      <span class="ctx-header-name" id="ctx-header-name">—</span>
+    </div>
+
+    <!-- Elválasztó -->
+    <div class="ctx-sep" aria-hidden="true"></div>
+
+    <!-- Menüpontok -->
+    <button class="ctx-item" id="ctx-open"     role="menuitem">
+      <span class="ctx-item-key">[O]</span> Megnyitás
+    </button>
+    <button class="ctx-item" id="ctx-download" role="menuitem">
+      <span class="ctx-item-key">[D]</span> Letöltés
+    </button>
+    <button class="ctx-item" id="ctx-copy"     role="menuitem">
+      <span class="ctx-item-key">[C]</span> Link másolása
+    </button>
+    <button class="ctx-item" id="ctx-saveas"   role="menuitem">
+      <span class="ctx-item-key">[S]</span> Mentés másként
+    </button>
+    <button class="ctx-item" id="ctx-newtab"   role="menuitem">
+      <span class="ctx-item-key">[T]</span> Megnyitás új lapon
+    </button>
+
+  </nav><!-- /#ctx-menu -->
+
+
+  <!-- ============================================================
+       RÉTEG 7: Jelszó dialóg – védett mappákhoz
+       ============================================================ -->
+  <div id="pw-overlay" class="pw-overlay hidden" role="dialog" aria-modal="true" aria-label="Jelszó szükséges">
+    <div class="pw-box" id="pw-box">
+
+      <!-- Fejléc -->
+      <div class="pw-header">
+        <span class="pw-lock-icon">&#9632;</span>
+        <span class="pw-title">HOZZÁFÉRÉS KORLÁTOZOTT</span>
+      </div>
+
+      <!-- Mappa neve -->
+      <div class="pw-folder-name" id="pw-folder-name">—</div>
+
+      <!-- Jelszó input -->
+      <div class="pw-input-wrap">
+        <span class="pw-prompt-char">&gt;</span>
+        <input
+          type="password"
+          id="pw-input"
+          class="pw-input"
+          placeholder="jelszó..."
+          autocomplete="current-password"
+          spellcheck="false"
+        />
+      </div>
+
+      <!-- Hibaüzenet -->
+      <div class="pw-error" id="pw-error"></div>
+
+      <!-- Gombok -->
+      <div class="pw-buttons">
+        <button class="btn btn-yes" id="pw-submit">[ ENTER ]</button>
+        <button class="btn btn-no"  id="pw-cancel">[ ESC ]</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- marked.js: Markdown → HTML konvertáló -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+  <script src="script.js"></script>
+</body>
+</html>
