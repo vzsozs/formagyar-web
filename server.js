@@ -1,100 +1,295 @@
 // ============================================================
-// server.js – Express szerver fájllistázó API-val
-// Feladat: statikus fájlok + /api/files?path= végpont
+// server.js – Express szerver + jelszavas mappa védelem
+//
+// Függőségek: express, bcryptjs, jsonwebtoken, cookie-parser
+// Telepítés:  npm install
+//
+// Jelszó beállítása egy mappához:
+//   node setup-password.js public/data/titkos
 // ============================================================
 
-const express = require('express');
-const path    = require('path');
-const fs      = require('fs');
+const express      = require('express');
+const path         = require('path');
+const fs           = require('fs');
+const bcrypt       = require('bcryptjs');
+const jwt          = require('jsonwebtoken');
+const cookieParser = require('cookie-parser');
 
 const app  = express();
 const PORT = 3000;
 
-// Az adat-gyökér: public/data – ide kerülnek a feltöltendő mappák/fájlok
+// ---- Konfiguráció -----------------------------------------------
+
+// Az adat-gyökér: public/data
 const DATA_ROOT = path.join(__dirname, 'public', 'data');
 
-// Rejtett mappák nevei – ezeket kiszűrjük a listából
+// Rejtett mappák nevei a fájllistából
 const HIDDEN_DIRS = ['file'];
 
-// ---- Segédfüggvény: fájlméret ember-olvasható formátumba ---------------
+// JWT titkos kulcs: .env-ből, vagy indításkor generált véletlen érték.
+// Dockerben adj meg egy fix JWT_SECRET env változót, hogy újraindításkor
+// ne invalidálódjanak a régi tokenek.
+const JWT_SECRET = process.env.JWT_SECRET || require('crypto').randomBytes(48).toString('hex');
+
+// JWT élettartam: 8 óra (azután újra kell a jelszó)
+const JWT_TTL    = '8h';
+
+// ---- Middleware --------------------------------------------------
+app.use(express.json());          // JSON body parsing (POST-hoz)
+app.use(cookieParser());          // Cookie olvasás/írás
+
+
+// ============================================================
+// SEGÉDFÜGGVÉNYEK
+// ============================================================
+
 function formatSize(bytes) {
-  if (bytes < 1024)             return `${bytes} B`;
-  if (bytes < 1024 * 1024)     return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024)         return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-// ---- Segédfüggvény: fájltípus meghatározása kiterjesztés alapján -------
 function getFileType(name, isDir) {
   if (isDir) return 'dir';
   const ext = path.extname(name).toLowerCase();
-  const types = {
-    '.md':   'md',
-    '.txt':  'txt',
-    '.jpg':  'img', '.jpeg': 'img', '.png': 'img',
-    '.gif':  'img', '.webp': 'img', '.svg': 'img',
-    '.yt':   'yt',   // YouTube link fájl (következő task)
-    '.json': 'json',
-    '.js':   'js',
-    '.css':  'css',
-    '.html': 'html',
-    '.pdf':  'pdf',
-  };
-  return types[ext] || 'file';
+  return ({
+    '.md': 'md', '.txt': 'txt',
+    '.jpg': 'img', '.jpeg': 'img', '.png': 'img', '.gif': 'img', '.webp': 'img', '.svg': 'img',
+    '.yt': 'yt', '.json': 'json', '.js': 'js', '.css': 'css', '.html': 'html', '.pdf': 'pdf',
+  })[ext] || 'file';
 }
 
-// ---- API végpont: GET /api/files-raw?path= --------------------------
-// Ugyanaz mint /api/files, DE nem szűri ki a rejtett mappákat (HIDDEN_DIRS).
-// Kizárólag a CLI prompt használja (cd parancs rejtett mappákhoz).
-app.get('/api/files-raw', (req, res) => {
-  const reqPath = req.query.path || '.';
-  const absPath = path.resolve(DATA_ROOT, reqPath);
+// Megkeresi a legszorosabb .password fájlt a megadott útvonal fa-struktúrájában.
+// Visszaadja az útvonal-prefix-et, amelyhez a védelem tartozik, vagy null-t.
+// Pl.: "projektek/titkos/kepek" → megtalálja "projektek/titkos/.password"-t
+function findProtectionRoot(relPath) {
+  const segments = relPath ? relPath.split('/').filter(Boolean) : [];
+  // A gyökértől lefelé haladva keressük a legközelebbi .password-t
+  // (az első találat érvényes, az almappák is védve vannak)
+  for (let i = 0; i <= segments.length; i++) {
+    const checkDir  = path.join(DATA_ROOT, ...segments.slice(0, i));
+    const pwFile    = path.join(checkDir, '.password');
+    if (fs.existsSync(pwFile)) {
+      // A védelem gyökere: az a relatív útvonal ahol a .password van
+      return segments.slice(0, i).join('/') || '';
+    }
+  }
+  return null; // Nem védett
+}
 
-  if (!absPath.startsWith(DATA_ROOT))
-    return res.status(403).json({ error: 'Tiltott útvonal.' });
+// JWT token érvényességének ellenőrzése a sütikből.
+// Visszaadja a dekódolt payload-ot, vagy null-t ha érvénytelen.
+function getTokenPayload(req) {
+  const token = req.cookies?.dir_token;
+  if (!token) return null;
+  try {
+    return jwt.verify(token, JWT_SECRET);
+  } catch {
+    return null;
+  }
+}
 
-  if (!fs.existsSync(absPath))
-    return res.status(404).json({ error: 'A mappa nem található.' });
+// Ellenőrzi, hogy a kért útvonalhoz van-e érvényes token a sütikben.
+// A token a "protectedRoot" mezőt tartalmazza – ha a kért útvonal
+// ezzel kezdődik, a hozzáférés engedélyezett.
+function isAuthorized(req, protectionRoot) {
+  const payload = getTokenPayload(req);
+  if (!payload) return false;
+  // A token a pontos védett gyökér útvonalát tárolja
+  return payload.protectedRoot === protectionRoot;
+}
 
-  let entries;
-  try { entries = fs.readdirSync(absPath); }
-  catch { return res.status(500).json({ error: 'Nem olvasható.' }); }
-
-  const items = entries
-    .filter(n => !n.startsWith('.'))  // csak a dot-fájlokat rejtjük el
+// Mappa tartalmának listázása (közös logika /api/files és /api/files-raw-hoz)
+function listDirectory(absPath, filterHidden) {
+  const entries = fs.readdirSync(absPath);
+  return entries
+    .filter(name => {
+      if (name.startsWith('.')) return false;            // dot-fájlok mindig rejtve
+      if (name === '.password') return false;            // .password soha nem látható
+      if (filterHidden && HIDDEN_DIRS.includes(name.toLowerCase())) return false;
+      return true;
+    })
     .map(name => {
       const fp = path.join(absPath, name);
       let stat;
       try { stat = fs.statSync(fp); } catch { return null; }
       const isDir = stat.isDirectory();
-      return { name, type: getFileType(name, isDir), isDir,
-               size: isDir ? null : formatSize(stat.size),
-               modified: stat.mtime.toISOString().slice(0, 10) };
+      return {
+        name, type: getFileType(name, isDir), isDir,
+        size: isDir ? null : formatSize(stat.size),
+        sizeRaw: isDir ? 0 : stat.size,
+        modified: stat.mtime.toISOString().slice(0, 10),
+        // Jelzi, hogy ez a mappa jelszóval védett-e (csak mappáknál)
+        locked: isDir ? fs.existsSync(path.join(fp, '.password')) : false,
+      };
     })
     .filter(Boolean)
     .sort((a, b) => {
       if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
       return a.name.localeCompare(b.name);
     });
+}
 
-  res.json({ path: reqPath === '.' ? '' : reqPath, items });
+// Path traversal védelem + létezés ellenőrzés
+function resolveSafePath(reqPath) {
+  const absPath = path.resolve(DATA_ROOT, reqPath || '.');
+  if (!absPath.startsWith(DATA_ROOT)) return null;
+  if (!fs.existsSync(absPath))        return null;
+  return absPath;
+}
+
+
+// ============================================================
+// AUTH MIDDLEWARE – védett mappák kapuőre
+// Minden /api/* végpont elé fut, ha a mappa védett
+// ============================================================
+function requireAuth(req, res, next) {
+  const reqPath = req.query.path || req.body?.path || '.';
+
+  // A "." esetén a gyökeret nézzük
+  const relPath = reqPath === '.' ? '' : reqPath;
+
+  // Van-e .password fájl a fa valamely szintjén?
+  const protRoot = findProtectionRoot(relPath);
+  if (protRoot === null) {
+    // Nem védett útvonal → szabad átjárás
+    return next();
+  }
+
+  // Védett – van-e érvényes token?
+  if (isAuthorized(req, protRoot)) {
+    return next();
+  }
+
+  // Nincs token vagy érvénytelen → 401, a frontend feldobja a jelszó dialógot
+  return res.status(401).json({
+    error:          'Jelszó szükséges.',
+    protectedRoot:  protRoot,   // A kliens tudja, melyik mappáért kell jelszó
+  });
+}
+
+
+// ============================================================
+// API: POST /api/auth/unlock  – jelszó ellenőrzés + token kiadás
+// Body: { path: "relatív/útvonal", password: "titkos" }
+// ============================================================
+app.post('/api/auth/unlock', async (req, res) => {
+  const { path: reqPath, password } = req.body || {};
+
+  if (!password) return res.status(400).json({ error: 'Hiányzó jelszó.' });
+
+  const relPath  = (reqPath && reqPath !== '.') ? reqPath : '';
+  const protRoot = findProtectionRoot(relPath);
+
+  if (protRoot === null) {
+    return res.status(400).json({ error: 'Ez a mappa nem védett.' });
+  }
+
+  // .password fájl beolvasása
+  const pwFile = path.join(DATA_ROOT, protRoot, '.password');
+  if (!fs.existsSync(pwFile)) {
+    return res.status(500).json({ error: '.password fájl nem olvasható.' });
+  }
+
+  const hash = fs.readFileSync(pwFile, 'utf8').trim();
+
+  // Bcrypt összehasonlítás (aszinkron, timing-safe)
+  const ok = await bcrypt.compare(password, hash);
+  if (!ok) {
+    // 1 másodperces késleltetés brute-force ellen
+    await new Promise(r => setTimeout(r, 1000));
+    return res.status(403).json({ error: 'Hibás jelszó.' });
+  }
+
+  // JWT token kiállítása
+  const token = jwt.sign(
+    { protectedRoot: protRoot },
+    JWT_SECRET,
+    { expiresIn: JWT_TTL }
+  );
+
+  // Süti beállítása: HttpOnly, SameSite=Strict
+  res.cookie('dir_token', token, {
+    httpOnly: true,               // JS nem férhet hozzá → XSS védelem
+    sameSite: 'strict',           // CSRF védelem
+    secure:   process.env.NODE_ENV === 'production', // HTTPS-en mindig Secure
+    maxAge:   8 * 60 * 60 * 1000, // 8 óra ms-ban
+  });
+
+  res.json({ ok: true, protectedRoot: protRoot });
 });
 
-// ---- API végpont: GET /api/read-raw?path= ----------------------------
-// Ugyanaz mint /api/read, szűrés nélkül – CLI prompt fájlmegnyitáshoz.
-app.get('/api/read-raw', (req, res) => {
+
+// ============================================================
+// API: GET /api/files?path=  – fájllista (védett mappák kizárva)
+// ============================================================
+app.get('/api/files', requireAuth, (req, res) => {
+  const reqPath = req.query.path || '.';
+  const absPath = resolveSafePath(reqPath);
+  if (!absPath) return res.status(404).json({ error: 'A mappa nem található.' });
+
+  try {
+    const items = listDirectory(absPath, true); // filterHidden=true
+    res.json({ path: reqPath === '.' ? '' : reqPath, items });
+  } catch {
+    res.status(500).json({ error: 'Nem olvasható a mappa.' });
+  }
+});
+
+
+// ============================================================
+// API: GET /api/files-raw?path=  – fájllista, HIDDEN_DIRS szűrés nélkül
+// CLI prompt használja; auth ugyanúgy érvényes
+// ============================================================
+app.get('/api/files-raw', requireAuth, (req, res) => {
+  const reqPath = req.query.path || '.';
+  const absPath = resolveSafePath(reqPath);
+  if (!absPath) return res.status(404).json({ error: 'A mappa nem található.' });
+
+  try {
+    const items = listDirectory(absPath, false); // filterHidden=false
+    res.json({ path: reqPath === '.' ? '' : reqPath, items });
+  } catch {
+    res.status(500).json({ error: 'Nem olvasható.' });
+  }
+});
+
+
+// ============================================================
+// API: GET /api/read?path=  – fájl tartalom olvasás
+// ============================================================
+app.get('/api/read', requireAuth, (req, res) => {
+  const reqPath = req.query.path;
+  if (!reqPath) return res.status(400).json({ error: 'Hiányzó path paraméter.' });
+
+  const absPath = resolveSafePath(reqPath);
+  if (!absPath) return res.status(404).json({ error: 'A fájl nem található.' });
+
+  const allowed = ['.md', '.txt', '.yt', '.json', '.js', '.css', '.html'];
+  if (!allowed.includes(path.extname(absPath).toLowerCase()))
+    return res.status(415).json({ error: 'Ez a fájltípus nem olvasható.' });
+
+  try {
+    res.type('text/plain; charset=utf-8').send(fs.readFileSync(absPath, 'utf8'));
+  } catch {
+    res.status(500).json({ error: 'Nem olvasható a fájl.' });
+  }
+});
+
+
+// ============================================================
+// API: GET /api/read-raw?path=  – fájl tartalom, CLI-hez
+// ============================================================
+app.get('/api/read-raw', requireAuth, (req, res) => {
   const reqPath = req.query.path;
   if (!reqPath) return res.status(400).json({ error: 'Hiányzó path.' });
 
-  const absPath = path.resolve(DATA_ROOT, reqPath);
-  if (!absPath.startsWith(DATA_ROOT))
-    return res.status(403).json({ error: 'Tiltott útvonal.' });
+  const absPath = resolveSafePath(reqPath);
+  if (!absPath) return res.status(404).json({ error: 'A fájl nem található.' });
 
   const allowed = ['.md', '.txt', '.yt', '.json', '.js', '.css', '.html'];
   if (!allowed.includes(path.extname(absPath).toLowerCase()))
     return res.status(415).json({ error: 'Ez a fájltípus nem olvasható szövegként.' });
-
-  if (!fs.existsSync(absPath))
-    return res.status(404).json({ error: 'A fájl nem található.' });
 
   try {
     res.type('text/plain; charset=utf-8').send(fs.readFileSync(absPath, 'utf8'));
@@ -103,116 +298,27 @@ app.get('/api/read-raw', (req, res) => {
   }
 });
 
-// ---- API végpont: GET /api/files?path=almappa/almappa ----------------
-// Visszaadja a megadott relatív útvonal tartalmát JSON-ban
-app.get('/api/files', (req, res) => {
 
-  // Relatív útvonal a query stringből (alapértelmezés: gyökér ".")
-  const reqPath = req.query.path || '.';
-
-  // Biztonsági check: megakadályozza a könyvtárból való kilépést (path traversal)
-  const absPath = path.resolve(DATA_ROOT, reqPath);
-  if (!absPath.startsWith(DATA_ROOT)) {
-    return res.status(403).json({ error: 'Tiltott útvonal.' });
-  }
-
-  // Ellenőrzés: létezik-e a mappa?
-  if (!fs.existsSync(absPath)) {
-    return res.status(404).json({ error: 'A mappa nem található.' });
-  }
-
-  let entries;
-  try {
-    entries = fs.readdirSync(absPath);
-  } catch (err) {
-    return res.status(500).json({ error: 'Nem olvasható a mappa.' });
-  }
-
-  // Bejárás, szűrés, metaadatok gyűjtése
-  const items = entries
-    .filter(name => {
-      // Rejtett fájlok kizárása (pont-tal kezdődők)
-      if (name.startsWith('.')) return false;
-      // "file" nevű mappák kizárása (és egyéb HIDDEN_DIRS elemek)
-      if (HIDDEN_DIRS.includes(name.toLowerCase())) return false;
-      return true;
-    })
-    .map(name => {
-      const fullPath = path.join(absPath, name);
-      let stat;
-      try { stat = fs.statSync(fullPath); }
-      catch { return null; } // olvasási hiba esetén kihagyjuk
-
-      const isDir = stat.isDirectory();
-      return {
-        name,
-        type:     getFileType(name, isDir),
-        isDir,
-        size:     isDir ? null : formatSize(stat.size),
-        sizeRaw:  isDir ? 0 : stat.size,
-        modified: stat.mtime.toISOString().slice(0, 10), // YYYY-MM-DD
-      };
-    })
-    .filter(Boolean) // null-ok kiszűrése
-    .sort((a, b) => {
-      // Mappák előre, fájlok utána; azon belül ABC sorrend
-      if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
-      return a.name.localeCompare(b.name);
-    });
-
-  // Relatív útvonal visszaküldése (breadcrumb-hoz kell a kliensen)
-  res.json({
-    path:  reqPath === '.' ? '' : reqPath,
-    items,
-  });
-});
-
-// ---- API végpont: GET /api/read?path=mappa/fajl.md ------------------
-// Visszaadja egy fájl tartalmát nyers szövegként (MD, TXT, YT)
-// Csak a DATA_ROOT-on belüli fájlokhoz enged hozzáférést (biztonság)
-app.get('/api/read', (req, res) => {
-  const reqPath = req.query.path;
-  if (!reqPath) return res.status(400).json({ error: 'Hiányzó path paraméter.' });
-
-  // Path traversal védelem
-  const absPath = path.resolve(DATA_ROOT, reqPath);
-  if (!absPath.startsWith(DATA_ROOT)) {
-    return res.status(403).json({ error: 'Tiltott útvonal.' });
-  }
-
-  // Csak ismert szöveges kiterjesztéseket engedünk olvasni
-  const allowed = ['.md', '.txt', '.yt', '.json', '.js', '.css', '.html'];
-  if (!allowed.includes(path.extname(absPath).toLowerCase())) {
-    return res.status(415).json({ error: 'Ez a fájltípus nem olvasható.' });
-  }
-
-  if (!fs.existsSync(absPath)) {
-    return res.status(404).json({ error: 'A fájl nem található.' });
-  }
-
-  try {
-    // UTF-8 szöveg visszaküldése
-    const content = fs.readFileSync(absPath, 'utf8');
-    res.type('text/plain; charset=utf-8').send(content);
-  } catch (err) {
-    res.status(500).json({ error: 'Nem olvasható a fájl.' });
-  }
-});
-
-// Statikus fájlok kiszolgálása a 'public' könyvtárból
+// ============================================================
+// Statikus fájlok + SPA fallback
+// ============================================================
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Minden egyéb GET → index.html (SPA-kompatibilis)
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+
+// ============================================================
 // Szerver indítása
+// ============================================================
 app.listen(PORT, () => {
   console.log(`[SERVER] Fut: http://localhost:${PORT}`);
   console.log(`[SERVER] Adatgyökér: ${DATA_ROOT}`);
-
-  // Ha még nem létezik a data mappa, létrehozzuk
+  if (!process.env.JWT_SECRET) {
+    console.warn('[SERVER] ⚠️  JWT_SECRET nincs beállítva! Minden újraindításkor új kulcs generálódik.');
+    console.warn('[SERVER]    Dockerben add meg: -e JWT_SECRET=<titkos_kulcs>');
+  }
   if (!fs.existsSync(DATA_ROOT)) {
     fs.mkdirSync(DATA_ROOT, { recursive: true });
     console.log('[SERVER] public/data mappa létrehozva.');

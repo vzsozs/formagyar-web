@@ -95,7 +95,7 @@ async function runBootSequence() {
 
   // 5. Progress bar megjelenítése és animálása
   progressWrap.style.display = 'inline-block';
-  await animateProgress(progressBar, 1100);
+  await animateProgress(progressBar, 1400);
 
   // 6. Progress bar eltűnik, OK megjelenik
   progressWrap.style.display = 'none';
@@ -181,6 +181,7 @@ function getIcon(type) {
 // path: relatív útvonal a data/ gyökérhöz képest
 // ============================================================
 async function loadDirectory(path) {
+  const previousPath = currentPath; // mentjük, ha 401-re visszakell állni
   currentPath = path;
   if (typeof updateCliPrefix === 'function') updateCliPrefix();
 
@@ -193,12 +194,21 @@ async function loadDirectory(path) {
 
   let data;
   try {
-    // API hívás: /api/files?path=... (üres string = gyökér)
     const res = await fetch(`/api/files?path=${encodeURIComponent(path || '.')}`);
+
+    // 401: védett mappa – jelszó dialóg feldobása
+    if (res.status === 401) {
+      const body = await res.json();
+      // Visszaállítjuk az előző útvonalat (ne maradjunk védett helyen)
+      currentPath = previousPath;
+      renderBreadcrumb(previousPath);
+      showPasswordDialog(body.protectedRoot, () => loadDirectory(path));
+      return;
+    }
+
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     data = await res.json();
   } catch (err) {
-    // Hálózati vagy szerverhiba megjelenítése
     fileListWrap.innerHTML = `<div class="error-state">> HIBA: ${err.message}</div>`;
     statusCount.textContent = 'Hiba.';
     return;
@@ -239,9 +249,10 @@ function renderFileList(items) {
         data-type="${item.type}"
         data-name="${escapeAttr(item.name)}"
         data-isdir="${item.isDir}"
+        data-locked="${item.locked ? 'true' : 'false'}"
         role="listitem"
         tabindex="0"
-        aria-label="${item.name}"
+        aria-label="${item.name}${item.locked ? ' (védett)' : ''}"
       >
         <span class="col-icon ${icon.cls}">${icon.label}</span>
         <span class="col-name">
@@ -814,11 +825,111 @@ ctxBtnNewTab.addEventListener('click', () => {
   const url = buildFileUrl(ctxTarget.item);
   window.open(url, '_blank', 'noopener,noreferrer');
 
-  closeCtxMenu();
+// ============================================================
+// JELSZÓ DIALÓG – védett mappák feloldásához
+// ============================================================
+
+const pwOverlay    = document.getElementById('pw-overlay');
+const pwBox        = document.getElementById('pw-box');
+const pwFolderName = document.getElementById('pw-folder-name');
+const pwInput      = document.getElementById('pw-input');
+const pwError      = document.getElementById('pw-error');
+const pwSubmit     = document.getElementById('pw-submit');
+const pwCancel     = document.getElementById('pw-cancel');
+
+// Callback: sikeres feloldás után ezt hívja a dialóg
+let pwSuccessCallback = null;
+
+// Dialóg megnyitása
+// protectedRoot: a védett mappa relatív útvonala (pl. "titkos")
+// onSuccess: függvény, amit sikeres jelszó után hívunk
+function showPasswordDialog(protectedRoot, onSuccess) {
+  pwFolderName.textContent = protectedRoot || '(gyökér)';
+  pwInput.value            = '';
+  pwError.textContent      = '';
+  pwSuccessCallback        = onSuccess;
+
+  pwOverlay.classList.remove('hidden');
+  // Kis késleltetés után fókusz az input-ra (animáció után)
+  setTimeout(() => pwInput.focus(), 150);
+}
+
+// Dialóg bezárása
+function closePasswordDialog() {
+  pwOverlay.classList.add('hidden');
+  pwInput.value       = '';
+  pwError.textContent = '';
+  pwSuccessCallback   = null;
+}
+
+// Jelszó beküldése a szervernek
+async function submitPassword() {
+  const password    = pwInput.value;
+  const folderName  = pwFolderName.textContent;
+
+  if (!password) {
+    pwError.textContent = '> Írj be egy jelszót!';
+    pwInput.focus();
+    return;
+  }
+
+  // Gomb letiltása a dupla klikk ellen
+  pwSubmit.disabled = true;
+  pwError.textContent = '> Ellenőrzés...';
+
+  try {
+    const res = await fetch('/api/auth/unlock', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ path: folderName, password }),
+    });
+
+    const data = await res.json();
+
+    if (res.ok && data.ok) {
+      // Siker: bezárjuk a dialógot, és futtatjuk a callback-et
+      closePasswordDialog();
+      if (pwSuccessCallback) pwSuccessCallback();
+    } else {
+      // Hibás jelszó: shake animáció + hibaüzenet
+      pwError.textContent = `> ${data.error || 'Hibás jelszó.'}`;
+      pwInput.value       = '';
+      pwInput.focus();
+      // Shake effekt
+      pwBox.classList.remove('shake');
+      void pwBox.offsetWidth; // reflow a class-újraalkalmazáshoz
+      pwBox.classList.add('shake');
+      pwBox.addEventListener('animationend', () => pwBox.classList.remove('shake'), { once: true });
+    }
+  } catch {
+    pwError.textContent = '> Hálózati hiba. Próbáld újra.';
+  } finally {
+    pwSubmit.disabled = false;
+  }
+}
+
+// Gombok
+pwSubmit.addEventListener('click', submitPassword);
+pwCancel.addEventListener('click', closePasswordDialog);
+
+// ENTER a jelszó input-ban
+pwInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); submitPassword(); }
+  if (e.key === 'Escape') { e.preventDefault(); closePasswordDialog(); }
+  e.stopPropagation(); // ne navigáljon a fájllistában
 });
 
-// ============================================================
-// TOAST ÉRTESÍTŐ
+// ESC az overlay-en (de ne az input-on, azt fentebb kezeljük)
+pwOverlay.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && document.activeElement !== pwInput) {
+    closePasswordDialog();
+  }
+});
+
+// Háttérre kattintva bezár
+pwOverlay.addEventListener('click', (e) => {
+  if (e.target === pwOverlay) closePasswordDialog();
+});
 // Rövid visszajelzés a képernyő alján (pl. "Link másolva!")
 // ============================================================
 function showToast(msg) {
@@ -1047,6 +1158,12 @@ async function loadDirectoryRaw(dirPath) {
   let data;
   try {
     const res = await fetch(`/api/files-raw?path=${encodeURIComponent(dirPath || '.')}`);
+    if (res.status === 401) {
+      const body = await res.json();
+      currentPath = ''; updateCliPrefix();
+      showPasswordDialog(body.protectedRoot, () => loadDirectoryRaw(dirPath));
+      return;
+    }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     data = await res.json();
   } catch (err) {

@@ -1129,7 +1129,141 @@ body {
 }
 
 /* ============================================================
-   SEGÉDOSZTÁLYOK
+   JELSZÓ DIALÓG – védett mappák belépéséhez
+   ============================================================ */
+
+.pw-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 5, 3, 0.92);
+  backdrop-filter: blur(3px);
+  animation: overlayIn 0.15s ease both;
+}
+
+.pw-box {
+  width: min(440px, 88vw);
+  border: 2px solid var(--orange);
+  background: #020c06;
+  box-shadow:
+    0 0 30px var(--orange-glow),
+    0 0 80px rgba(255, 140, 0, 0.08),
+    inset 0 0 30px rgba(255, 140, 0, 0.03);
+  animation: viewerSlideIn 0.2s cubic-bezier(0.16,1,0.3,1) both;
+}
+
+/* Fejléc */
+.pw-header {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.6rem 1rem;
+  background: rgba(255, 140, 0, 0.07);
+  border-bottom: 1px solid rgba(255, 140, 0, 0.3);
+}
+
+.pw-lock-icon {
+  color: var(--orange);
+  font-size: 10px;
+  text-shadow: 0 0 8px var(--orange-glow);
+  animation: blinkText 1.2s step-end infinite;
+}
+
+.pw-title {
+  font-size: 8px;
+  color: var(--orange);
+  letter-spacing: 2px;
+  text-shadow: 0 0 6px var(--orange-glow);
+}
+
+/* Mappa neve */
+.pw-folder-name {
+  font-size: 9px;
+  color: var(--cyan-dim);
+  padding: 1rem 1rem 0.5rem;
+  letter-spacing: 1px;
+}
+.pw-folder-name::before { content: '~/data/'; color: var(--dim); }
+
+/* Input sor */
+.pw-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem 0.3rem;
+  border-top: 1px solid var(--dim2);
+  border-bottom: 1px solid var(--dim2);
+  margin: 0.5rem 0;
+}
+
+.pw-prompt-char {
+  color: var(--orange);
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.pw-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-family: var(--font);
+  font-size: 10px;
+  color: var(--cyan);
+  caret-color: var(--cyan);
+  letter-spacing: 3px; /* jelszó karakterek szétválasztva */
+}
+.pw-input::placeholder { color: var(--dim); font-size: 8px; letter-spacing: 1px; }
+
+/* Shake animáció hibás jelszóra */
+.pw-box.shake {
+  animation: pwShake 0.4s ease both;
+}
+@keyframes pwShake {
+  0%,100% { transform: translateX(0); }
+  20%     { transform: translateX(-10px); }
+  40%     { transform: translateX(10px); }
+  60%     { transform: translateX(-8px); }
+  80%     { transform: translateX(8px); }
+}
+
+/* Hibaüzenet */
+.pw-error {
+  font-size: 8px;
+  color: var(--orange);
+  text-shadow: 0 0 5px var(--orange-glow);
+  padding: 0 1rem 0.5rem;
+  min-height: 1.5em;
+  letter-spacing: 1px;
+}
+
+/* Gombok */
+.pw-buttons {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  padding: 0.8rem 1rem 1.2rem;
+}
+.pw-buttons .btn { font-size: 11px; padding: 0.5rem 1.2rem; }
+
+/* ---- Zárolt mappa ikon a fájllistában ---- */
+/* Ha a sor data-locked="true", narancssárga lakat jelenik meg a név után */
+.file-row[data-locked="true"] .col-name-text::after {
+  content: ' 🔒';
+  font-size: 10px;
+  opacity: 0.7;
+}
+/* Alternatív ASCII verzió ha az emoji nem illik */
+.file-row[data-locked="true"] .col-icon {
+  color: var(--orange);
+  text-shadow: 0 0 6px var(--orange-glow);
+}
+
+/* ============================================================
+   JELSZÓ DIALÓG – védett mappák belépéséhez
    ============================================================ */
 .hidden { display: none !important; }
 

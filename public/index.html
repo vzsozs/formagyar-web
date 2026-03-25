@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>FORMAGYÁR // READY</title>
+  <title>TERMINAL // READY</title>
 
   <!-- Google Fonts: pixeles terminál-betűtípus -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -200,6 +200,46 @@
 
   </nav><!-- /#ctx-menu -->
 
+
+  <!-- ============================================================
+       RÉTEG 7: Jelszó dialóg – védett mappákhoz
+       ============================================================ -->
+  <div id="pw-overlay" class="pw-overlay hidden" role="dialog" aria-modal="true" aria-label="Jelszó szükséges">
+    <div class="pw-box" id="pw-box">
+
+      <!-- Fejléc -->
+      <div class="pw-header">
+        <span class="pw-lock-icon">&#9632;</span>
+        <span class="pw-title">HOZZÁFÉRÉS KORLÁTOZOTT</span>
+      </div>
+
+      <!-- Mappa neve -->
+      <div class="pw-folder-name" id="pw-folder-name">—</div>
+
+      <!-- Jelszó input -->
+      <div class="pw-input-wrap">
+        <span class="pw-prompt-char">&gt;</span>
+        <input
+          type="password"
+          id="pw-input"
+          class="pw-input"
+          placeholder="jelszó..."
+          autocomplete="current-password"
+          spellcheck="false"
+        />
+      </div>
+
+      <!-- Hibaüzenet -->
+      <div class="pw-error" id="pw-error"></div>
+
+      <!-- Gombok -->
+      <div class="pw-buttons">
+        <button class="btn btn-yes" id="pw-submit">[ ENTER ]</button>
+        <button class="btn btn-no"  id="pw-cancel">[ ESC ]</button>
+      </div>
+
+    </div>
+  </div>
 
   <!-- marked.js: Markdown → HTML konvertáló -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
