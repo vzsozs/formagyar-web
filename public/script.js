@@ -827,6 +827,7 @@ ctxBtnNewTab.addEventListener('click', () => {
   closeCtxMenu();
 });
 
+
 // ============================================================
 // JELSZÓ DIALÓG – védett mappák feloldásához
 // ============================================================
