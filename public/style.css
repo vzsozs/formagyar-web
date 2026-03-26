@@ -272,7 +272,7 @@ body {
    ============================================================ */
 .file-list-header {
   display: grid;
-  grid-template-columns: 52px 1fr 90px 90px;
+  grid-template-columns: 52px 1fr 80px 52px 90px;
   gap: 0;
   padding: 0.35rem 1.2rem;
   border-bottom: 1px solid var(--dim);
@@ -302,7 +302,7 @@ body {
    ============================================================ */
 .file-row {
   display: grid;
-  grid-template-columns: 52px 1fr 90px 90px;
+  grid-template-columns: 52px 1fr 80px 52px 90px;
   align-items: center;
   height: var(--row-h);
   padding: 0 1.2rem;
@@ -373,6 +373,17 @@ body {
   white-space: nowrap;
   letter-spacing: 1px;
 }
+
+/* ---- Letöltés számláló oszlop ---- */
+.col-dl {
+  font-size: 7px;
+  color: var(--cyan-dim);
+  white-space: nowrap;
+  text-align: center;
+  letter-spacing: 0;
+}
+.file-row:hover .col-dl,
+.file-row.selected .col-dl { color: var(--cyan); }
 
 /* ============================================================
    ÜRES MAPPA ÁLLAPOT
@@ -525,6 +536,36 @@ body {
 .viewer-close:focus-visible {
   outline: 1px solid var(--orange);
   outline-offset: 2px;
+}
+
+/* [ ⛶ ] maximize gomb – a bezárás bal oldalán */
+.viewer-maximize {
+  font-family: var(--font);
+  font-size: 9px;
+  color: var(--cyan-dim);
+  background: transparent;
+  border: 1px solid var(--dim);
+  padding: 4px 8px;
+  cursor: pointer;
+  letter-spacing: 1px;
+  flex-shrink: 0;
+  transition: color 0.1s, border-color 0.1s, box-shadow 0.1s;
+  margin-right: 4px;
+}
+.viewer-maximize:hover {
+  color: var(--cyan);
+  border-color: var(--cyan-dim);
+  box-shadow: 0 0 8px var(--cyan-glow);
+}
+
+/* Teljes képernyős viewer */
+.viewer-box.viewer-maximized {
+  width:      98vw  !important;
+  max-height: 96vh  !important;
+  /* Felülírja az összes típus-specifikus szélességet */
+}
+.viewer-box.viewer-maximized .viewer-content {
+  max-height: none;
 }
 
 /* --- Modal tartalom terület --- */
@@ -880,6 +921,40 @@ body {
 .img-label    { color: #a78bfa; text-shadow: 0 0 5px rgba(167, 139, 250, 0.4); }
 .img-filename { color: var(--cyan-dim); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .img-size     { color: var(--dim); flex-shrink: 0; }
+
+/* Lapszámláló pl. "2 / 7" */
+.img-counter {
+  color: var(--orange);
+  font-size: 7px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* ---- Képlapozó gombok (← ►) ---- */
+.img-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid var(--cyan-dim);
+  color: var(--cyan);
+  font-size: 14px;
+  padding: 0.4rem 0.6rem;
+  cursor: pointer;
+  line-height: 1;
+  transition: background 0.12s, box-shadow 0.12s;
+  z-index: 5;
+}
+.img-nav:hover:not(:disabled) {
+  background: rgba(0, 255, 200, 0.15);
+  box-shadow: 0 0 10px var(--cyan-glow);
+}
+.img-nav:disabled {
+  opacity: 0.2;
+  cursor: default;
+}
+.img-prev { left:  8px; }
+.img-next { right: 8px; }
 
 /* ============================================================
    CUSTOM KONTEXTUS MENÜ
@@ -1278,6 +1353,6 @@ body {
 
   /* Kis képernyőn a dátum oszlop eltűnik */
   .file-list-header,
-  .file-row { grid-template-columns: 46px 1fr 70px; }
+  .file-row { grid-template-columns: 46px 1fr 60px 44px; }
   .col-date  { display: none; }
 }
